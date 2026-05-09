@@ -113,3 +113,40 @@ class Documento(models.Model):
     class Meta:
         db_table = 'documento'
         ordering = ['-fecha_subida']
+
+class Plan(models.Model):
+    oid_plan = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=50)
+    precio_mensual = models.DecimalField(max_digits=10, decimal_places=2)
+    precio_anual = models.DecimalField(max_digits=10, decimal_places=2)
+    descripcion = models.TextField(blank=True, default='')
+    estado = models.BooleanField(default=True)
+    class Meta:
+        db_table = 'plan'
+    def __str__(self): return self.nombre
+
+class Pago(models.Model):
+    oid_pago = models.AutoField(primary_key=True)
+    oid_usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='oid_usuario')
+    oid_plan = models.ForeignKey(Plan, on_delete=models.PROTECT, db_column='oid_plan')
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha_pago = models.DateTimeField(auto_now_add=True)
+    metodo_pago = models.CharField(max_length=50)
+    estado_pago = models.CharField(max_length=20) # Ej: Pendiente, Completado, Fallido
+    referencia_externa = models.CharField(max_length=100, blank=True, default='')
+    class Meta:
+        db_table = 'pago'
+    def __str__(self): return f"Pago {self.oid_pago} - {self.oid_usuario.email}"
+
+class Notificacion(models.Model):
+    oid_notificacion = models.AutoField(primary_key=True)
+    oid_usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='oid_usuario')
+    titulo = models.CharField(max_length=150)
+    mensaje = models.TextField()
+    tipo = models.CharField(max_length=30) # Ej: in-app, email
+    leida = models.BooleanField(default=False)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table = 'notificacion'
+        ordering = ['-fecha_creacion']
+    def __str__(self): return f"{self.titulo} - {self.oid_usuario.email}"

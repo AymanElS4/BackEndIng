@@ -10,13 +10,15 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import (
     Rol, Usuario, TipoCaso, EstadoCaso,
-    Caso, CodigoLegal, CasoNormativa, Documento
+    Caso, CodigoLegal, CasoNormativa, Documento,
+    Plan, Pago, Notificacion
 )
 from .serializers import (
     RegisterSerializer, LoginSerializer, UsuarioSerializer,
     UsuarioUpdateSerializer, RolSerializer, TipoCasoSerializer,
     EstadoCasoSerializer, CasoSerializer, CasoCreateSerializer,
-    CodigoLegalSerializer, CasoNormativaSerializer, DocumentoSerializer
+    CodigoLegalSerializer, CasoNormativaSerializer, DocumentoSerializer,
+    PlanSerializer, PagoSerializer, NotificacionSerializer
 )
 
 
@@ -185,3 +187,78 @@ class DocumentoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['oid_caso', 'tipo_documento']
+
+
+class PlanViewSet(viewsets.ReadOnlyModelViewSet):
+    """GET /api/planes/ — Listar planes disponibles."""
+    queryset = Plan.objects.filter(estado=True)
+    serializer_class = PlanSerializer
+    permission_classes = [AllowAny]
+
+
+class PagoViewSet(viewsets.ModelViewSet):
+    """CRUD /api/pagos/ — Gestión de pagos."""
+    queryset = Pago.objects.select_related('oid_usuario', 'oid_plan').all()
+    serializer_class = PagoSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['oid_usuario', 'oid_plan', 'estado_pago']
+
+    def get_queryset(self):
+        # Usuarios solo ven sus propios pagos, admin ve todos
+        user = self.request.user
+        if user.oid_rol and user.oid_rol.nombre == 'Administrador':
+            return self.queryset
+        return self.queryset.filter(oid_usuario=user)
+
+
+class NotificacionViewSet(viewsets.ModelViewSet):
+    """CRUD /api/notificaciones/ — Sistema de notificaciones."""
+    queryset = Notificacion.objects.select_related('oid_usuario').all()
+    serializer_class = NotificacionSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['leida', 'tipo']
+
+    def get_queryset(self):
+        return self.queryset.filter(oid_usuario=self.request.user)
+
+
+# ============================================================
+# Extra Functional Endpoints (Auth & Reports)
+107: # ============================================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_view(request):
+    """POST /api/auth/password-reset/ — Mock de reset de contraseña."""
+    email = request.data.get('email')
+    if not email:
+        return Response({'error': 'Email es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+    # Aquí iría la lógica de envío de email
+    return Response({'message': f'Se ha enviado un enlace de recuperación a {email}'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def verify_2fa_view(request):
+    """POST /api/auth/2fa/verify/ — Mock de verificación 2FA."""
+    code = request.data.get('code')
+    if code == "123456": # Mock validation
+        return Response({'status': 'verified'})
+    return Response({'error': 'Código inválido'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def generar_reporte_pdf_view(request, caso_id):
+    """GET /api/reportes/caso/{id}/pdf/ — Mock de generación de PDF."""
+    try:
+        caso = Caso.objects.get(oid_caso=caso_id)
+        # Mock de respuesta PDF
+        return Response({
+            'message': f'Generando reporte PDF para el caso {caso.numero_expediente}',
+            'download_url': f'/media/reports/caso_{caso_id}.pdf'
+        })
+    except Caso.DoesNotExist:
+        return Response({'error': 'Caso no encontrado'}, status=status.HTTP_404_NOT_FOUND)

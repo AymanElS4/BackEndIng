@@ -4,7 +4,8 @@ Serializers para la API REST del sistema legal.
 from rest_framework import serializers
 from .models import (
     Rol, Usuario, TipoCaso, EstadoCaso,
-    Caso, CodigoLegal, CasoNormativa, Documento
+    Caso, CodigoLegal, CasoNormativa, Documento,
+    Plan, Pago, Notificacion
 )
 
 
@@ -163,3 +164,31 @@ class DocumentoSerializer(serializers.ModelSerializer):
             'ruta_archivo', 'tipo_documento', 'fecha_subida'
         ]
         read_only_fields = ['oid_documento', 'fecha_subida']
+
+
+class PlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Plan
+        fields = '__all__'
+
+
+class PagoSerializer(serializers.ModelSerializer):
+    usuario_email = serializers.CharField(source='oid_usuario.email', read_only=True)
+    plan_nombre = serializers.CharField(source='oid_plan.nombre', read_only=True)
+
+    class Meta:
+        model = Pago
+        fields = [
+            'oid_pago', 'oid_usuario', 'usuario_email',
+            'oid_plan', 'plan_nombre', 'monto',
+            'fecha_pago', 'metodo_pago', 'estado_pago',
+            'referencia_externa'
+        ]
+        read_only_fields = ['oid_pago', 'fecha_pago']
+
+
+class NotificacionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notificacion
+        fields = '__all__'
+        read_only_fields = ['oid_notificacion', 'fecha_creacion']
