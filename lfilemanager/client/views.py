@@ -2,11 +2,13 @@
 Views (ViewSets) para la API REST del sistema legal.
 """
 from rest_framework import viewsets, status, permissions, filters
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django_filters.rest_framework import DjangoFilterBackend
+from django.http import FileResponse
 
 from .models import (
     Rol, Usuario, TipoCaso, EstadoCaso,
@@ -149,6 +151,7 @@ class CasoViewSet(viewsets.ModelViewSet):
     queryset = Caso.objects.select_related(
         'oid_abogado', 'oid_tipo_caso', 'oid_estado'
     ).all()
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['oid_tipo_caso', 'oid_estado', 'oid_abogado']
@@ -159,6 +162,63 @@ class CasoViewSet(viewsets.ModelViewSet):
         if self.action in ['create', 'update', 'partial_update']:
             return CasoCreateSerializer
         return CasoSerializer
+    
+    def perform_create(self, serializer):
+        """Crear caso y automáticamente crear documento si se envía PDF."""
+        # Extraer el archivo PDF del request
+        archivo_pdf = self.request.FILES.get('archivo_pdf')
+        
+        # Guardar el caso
+        caso = serializer.save()
+        
+        # Si hay PDF, crear documento automáticamente
+        if archivo_pdf:
+            nombre_archivo = archivo_pdf.name.rsplit('.', 1)[0]  # Remove .pdf extension
+            Documento.objects.create(
+                oid_caso=caso,
+                nombre_archivo=nombre_archivo,
+                ruta_archivo=archivo_pdf,
+                tipo_documento='Documento Principal'
+            )
+    
+    @action(detail=True, methods=['get'], url_path='descargar-documento')
+    def descargar_documento(self, request, pk=None):
+        """GET /api/casos/{id}/descargar-documento/ — Descargar documento principal del caso."""
+        caso = self.get_object()
+        
+        # Obtener el documento principal del caso
+        documento = Documento.objects.filter(
+            oid_caso=caso,
+            tipo_documento='Documento Principal'
+        ).first()
+        
+        if not documento or not documento.ruta_archivo:
+            return Response(
+                {'error': 'No hay documento disponible para descargar'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            file_path = documento.ruta_archivo.path
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type='application/pdf'
+            )
+            filename = documento.nombre_archivo or f"caso_{caso.oid_caso}"
+            if not filename.endswith('.pdf'):
+                filename += '.pdf'
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except FileNotFoundError:
+            return Response(
+                {'error': 'El archivo no se encuentra en el servidor'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Error al descargar: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class CodigoLegalViewSet(viewsets.ModelViewSet):

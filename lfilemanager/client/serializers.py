@@ -118,14 +118,40 @@ class CasoSerializer(serializers.ModelSerializer):
 
 
 class CasoCreateSerializer(serializers.ModelSerializer):
-    """Serializer para crear/editar un Caso."""
+    """Serializer para crear/editar un Caso con PDF."""
+    archivo_pdf = serializers.FileField(required=False, allow_null=True, write_only=True)
+    
     class Meta:
         model = Caso
         fields = [
             'oid_abogado', 'oid_tipo_caso', 'oid_estado',
             'titulo', 'descripcion', 'numero_expediente',
-            'fecha_inicio', 'fecha_cierre', 'juzgado'
+            'fecha_inicio', 'fecha_cierre', 'juzgado', 'archivo_pdf'
         ]
+    
+    def validate_archivo_pdf(self, value):
+        """Validar que el archivo sea PDF si se proporciona."""
+        if value is None:
+            return value
+        
+        if not value.name.lower().endswith('.pdf'):
+            raise serializers.ValidationError(
+                "Solo se permiten archivos PDF. Por favor, sube un archivo con extensión .pdf"
+            )
+        
+        # Verificar tamaño máximo (50 MB)
+        max_size = 50 * 1024 * 1024
+        if value.size > max_size:
+            raise serializers.ValidationError(
+                f"El archivo es demasiado grande. Máximo permitido: 50 MB. Tu archivo: {value.size / (1024*1024):.2f} MB"
+            )
+        
+        return value
+
+    def create(self, validated_data):
+        archivo_pdf = validated_data.pop('archivo_pdf', None)
+        caso = Caso.objects.create(**validated_data)
+        return caso
 
 
 class CodigoLegalSerializer(serializers.ModelSerializer):
